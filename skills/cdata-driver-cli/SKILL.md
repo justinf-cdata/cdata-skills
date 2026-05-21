@@ -15,21 +15,26 @@ The driver exposes the data source as a relational model:
 
 ---
 
-## CLI Location
+## CLI Invocation
 
-The CLI is a Java jar. Invoke with a path to the jar:
+The CLI installs as `cdatacli` and is on `PATH` after install:
 
 ```bash
-java -jar "/path/to/cdata-cli.jar" <command> [subcommand] [options]
+cdatacli <group> <subcommand> [options]
 ```
+
+Requires Java 17+. Drivers are discovered from `./` or `./lib/` relative to the CLI executable.
+
+If `cdatacli --version` is missing, install:
+
+- Windows (PowerShell): `iwr https://cdn.cdata.com/cli/install.ps1 | iex`
+- macOS/Linux: `curl -fsSL https://cdn.cdata.com/cli/install.sh | bash`
 
 ---
 
-## Output Formats
+## Output Format
 
-| Flag | Description | Best For |
-|---|---|---|
-| `-f json` | Structured JSON (default) | AI agents, programmatic use |
+All commands return JSON. Pretty-printed by default; append `--compact` for single-line JSON (useful for piping to `jq`). Errors return `{"error": "..."}`.
 
 ---
 
@@ -38,41 +43,44 @@ java -jar "/path/to/cdata-cli.jar" <command> [subcommand] [options]
 | Goal | Command |
 |---|---|
 | List installed drivers | `drivers list` |
-| Download a driver | `drivers download <source>` |
-| Activate license (trial) | `drivers activate <source> --trial --name N --email E` |
-| Activate license (key) | `drivers activate <source> --key KEY --name N --email E` |
-| Connection properties | `drivers connectionproperties <source> -f table` |
-| Create connection | `connection create --driver <source> --name N --connectionstring CS` |
+| Activate (trial) | `drivers activate --name <Driver> --email E --trial` |
+| Activate (key) | `drivers activate --name <Driver> --email E --key KEY` |
+| Inspect connection properties | `drivers connectionprops --name <Driver>` |
+| Generate driver-specific skill | `drivers skill <Driver>` |
+| Create connection | `connection create --driver <Driver> --name N --connectionstring CS` |
 | List connections | `connection list` |
 | Delete connection | `connection delete --name N` |
-| List tables | `query tables --connection N` |
-| Get columns | `query columns --connection N --table T` |
-| List procedures | `query procedures --connection N` |
-| Procedure params | `query parameters --connection N --procedure P` |
-| List catalogs | `query catalogs --connection N` |
-| List schemas | `query schemas --connection N` |
-| Run SELECT | `query sql --connection N --sql "SQL" -f table` |
-| Run write | `query sql --connection N --sql "SQL"` |
+| List catalogs | `metadata catalogs --connection N` |
+| List schemas | `metadata schemas --connection N` |
+| List tables | `metadata tables --connection N` |
+| Get columns | `metadata columns --connection N --table T` |
+| List procedures | `metadata procedures --connection N` |
+| Procedure params | `metadata parameters --connection N --procedure P` |
+| Run SQL (SELECT/DML) | `query sql --connection N --sql "SQL"` |
 | Execute procedure | `query sql --connection N --sql "EXEC Proc Param='val'"` |
 
-Every subcommand supports `-h` / `--help` — returns purpose, required args, optional args, and flags. Use when Command Reference
-doesn't cover your case:
-
+Every subcommand supports `--help` — returns purpose, required args, optional args, and flags. Use when Command Reference doesn't cover your case.
 
 ---
 
 ## Source-Specific Skills
 
-For popular sources, CData drivers expose a source-specific guide as a system table (e.g. `sys_guide`) — connection patterns,
-schema notes, and query examples tailored to that source. Not all sources will have this system table.
+For popular sources, CData drivers ship source-specific instructions (connection patterns, schema notes, query examples). Generate a ready-to-use skill with:
 
 ```bash
-<cli> query sql --connection <name> --sql "SELECT * FROM sys_guide"
+cdatacli drivers skill <Driver>
 ```
 
-Use the returned content to author a cdata-<source> skill at ~/skills/cdata-<source>/SKILL.md following standard skill
-conventions — concise triggering description, imperative body, examples from the guide. Load the new skill for future work on that
-source.
+This prints a YAML skill prefix followed by the contents of the driver's `sys_instructions` table. Redirect to `~/skills/cdata-<source>/SKILL.md` and load the new skill for future work on that source:
+
+```bash
+mkdir -p ~/skills/cdata-<source>
+cdatacli drivers skill <Driver> > ~/skills/cdata-<source>/SKILL.md
+```
+
+If the driver has no checked-in instructions, the command returns `No instructions available for <driver>` — in that case, proceed with the generic workflow below.
+
+---
 
 ## Best Practices
 
@@ -92,41 +100,35 @@ source.
 
 Confirm the **source** and **goal** (what to query or accomplish) before proceeding.
 
-If the source matches a source-specific SKILL, invoke it. If a source-specific SKILL does not exist but sys_guide does, create a skill and invoke it.
+If a source-specific SKILL is already installed at `~/skills/cdata-<source>/`, invoke it. Otherwise try `cdatacli drivers skill <Driver>` — if it returns content, save it as a new skill and invoke it. If it returns `No instructions available for <driver>`, continue with the generic workflow.
 
 ---
 
-### Step 2: Install the Driver
+### Step 2: Verify Driver is Available and Activated
 
 ```bash
-java -jar "/path/to/cdata-cli.jar" drivers list
+cdatacli drivers list
 ```
 
-If the driver is found and activated, skip to Step 3.
-
-#### Download
-
-```bash
-java -jar "/path/to/cdata-cli.jar" drivers download <source>
-java -jar "/path/to/cdata-cli.jar" drivers download <source> --version <version>
-```
+If the driver appears with `"activated": true`, skip to Step 3. If the driver is missing, place its CData JDBC JAR in `./` or `./lib/` next to the CLI executable, then re-run `drivers list` to confirm discovery.
 
 #### Activate
 
 Ask the user for their license key if they have one. Otherwise use `--trial` for a 30-day trial.
 
 ```bash
-java -jar "/path/to/cdata-cli.jar" drivers activate <source> --trial --name "Your Name" --email "you@example.com"
-java -jar "/path/to/cdata-cli.jar" drivers activate <source> --key "XXXXX-XXXXX" --name "Your Name" --email "you@example.com"
+cdatacli drivers activate --name "<Driver>" --email "you@example.com" --trial
+cdatacli drivers activate --name "<Driver>" --email "you@example.com" --key "XXXXX-XXXXX"
 ```
+
 ---
 
 ### Step 3: Check Connection Properties
 
-If a saved connection already exists, confirm with the user they would like to use it, if not query the driver's metadata to determine what credentials to ask for:
+If a saved connection already exists (`connection list`), confirm with the user they would like to use it. Otherwise, inspect the driver's connection properties to determine what credentials to ask for:
 
 ```bash
-java -jar "/path/to/cdata-cli.jar" drivers connectionproperties <source> -f table
+cdatacli drivers connectionprops --name "<Driver>"
 ```
 
 Focus on properties in the Authentication and OAuth categories. Key properties across all sources:
@@ -142,7 +144,8 @@ Focus on properties in the Authentication and OAuth categories. Key properties a
 Confirm the connection string values with the user, then save:
 
 ```bash
-java -jar "/path/to/cdata-cli.jar" connection create --driver <source> --name <connection-name> --connectionstring "<properties>"
+cdatacli connection create --driver "<Driver>" --name "<connection-name>" \
+  --connectionstring "<properties>"
 ```
 
 Common patterns:
@@ -157,25 +160,33 @@ Common patterns:
 The first query after creating an OAuth connection opens a browser for authentication. Subsequent queries auto-refresh tokens.
 
 ```bash
-java -jar "/path/to/cdata-cli.jar" connection list
-java -jar "/path/to/cdata-cli.jar" connection delete --name <connection-name>
+cdatacli connection list
+cdatacli connection delete --name "<connection-name>"
 ```
 
-Connections are saved to `~/.cdata/connections.json`.
+Connections are saved as encrypted `.conn` files (AES-256):
+
+| OS | Location |
+|---|---|
+| Windows | `%APPDATA%\CData\<Driver Name> Data Provider\` |
+| macOS | `~/Library/Application Support/CData/<Driver Name> Data Provider/` |
+| Linux | `~/.config/CData/<Driver Name> Data Provider/` |
 
 ---
 
 ### Step 5: Discover Schema
 
 ```bash
-java -jar "/path/to/cdata-cli.jar" query tables --connection <name> -f table
-java -jar "/path/to/cdata-cli.jar" query sql --connection <name> --sql "SELECT TableName, TableType, Description FROM sys_tables WHERE TableName LIKE '%<keyword>%'"
-java -jar "/path/to/cdata-cli.jar" query columns --connection <name> --table <TableName> -f table
-java -jar "/path/to/cdata-cli.jar" query procedures --connection <name> -f table
-java -jar "/path/to/cdata-cli.jar" query parameters --connection <name> --procedure <ProcedureName> -f table
-java -jar "/path/to/cdata-cli.jar" query catalogs --connection <name>
-java -jar "/path/to/cdata-cli.jar" query schemas --connection <name>
+cdatacli metadata tables --connection <name>
+cdatacli query sql --connection <name> --sql "SELECT TableName, TableType, Description FROM sys_tables WHERE TableName LIKE '%<keyword>%'"
+cdatacli metadata columns --connection <name> --table <TableName>
+cdatacli metadata procedures --connection <name>
+cdatacli metadata parameters --connection <name> --procedure <ProcedureName>
+cdatacli metadata catalogs --connection <name>
+cdatacli metadata schemas --connection <name>
 ```
+
+`metadata tables` and `metadata schemas` accept optional `--catalog` / `--schema` filters.
 
 ---
 
@@ -186,25 +197,33 @@ Use only column names confirmed by previous steps. Build incrementally.
 #### SELECT
 
 ```bash
-java -jar "/path/to/cdata-cli.jar" query sql --connection <name> --sql "SELECT * FROM [TableName] LIMIT 5" -f table
-java -jar "/path/to/cdata-cli.jar" query sql --connection <name> --sql "SELECT [Id], [Name], [Status] FROM [TableName] WHERE [Status] = 'Active' LIMIT 10"
-java -jar "/path/to/cdata-cli.jar" query sql --connection <name> --sql "SELECT a.[Id], a.[Name], b.[Name] AS Related FROM [TableA] a LEFT JOIN [TableB] b ON a.[ForeignKey] = b.[Id] LIMIT 10"
+cdatacli query sql --connection <name> --sql "SELECT * FROM [TableName] LIMIT 5"
+cdatacli query sql --connection <name> --sql "SELECT [Id], [Name], [Status] FROM [TableName] WHERE [Status] = 'Active' LIMIT 10"
+cdatacli query sql --connection <name> --sql "SELECT a.[Id], a.[Name], b.[Name] AS Related FROM [TableA] a LEFT JOIN [TableB] b ON a.[ForeignKey] = b.[Id] LIMIT 10"
+```
+
+Pipe to `jq` with `--compact`:
+
+```bash
+cdatacli query sql --connection <name> --sql "SELECT Id, Name FROM Account" --compact | jq '.[].Name'
 ```
 
 #### INSERT / UPDATE / DELETE
 
 ```bash
-java -jar "/path/to/cdata-cli.jar" query sql --connection <name> --sql "INSERT INTO [TableName] (Col1, Col2) VALUES ('val1', 'val2')"
-java -jar "/path/to/cdata-cli.jar" query sql --connection <name> --sql "UPDATE [TableName] SET [Col1] = 'new' WHERE [Id] = '123'"
-java -jar "/path/to/cdata-cli.jar" query sql --connection <name> --sql "DELETE FROM [TableName] WHERE [Id] = '123'"
+cdatacli query sql --connection <name> --sql "INSERT INTO [TableName] (Col1, Col2) VALUES ('val1', 'val2')"
+cdatacli query sql --connection <name> --sql "UPDATE [TableName] SET [Col1] = 'new' WHERE [Id] = '123'"
+cdatacli query sql --connection <name> --sql "DELETE FROM [TableName] WHERE [Id] = '123'"
 ```
+
 If writes fail, the connection may have `ReadOnly=true` — recreate without it.
 
 #### Stored Procedures
 
 ```bash
-java -jar target/cdata-cli.jar query sql --connection <name> --sql "EXEC ProcedureName Param1='value1', Param2='value2'"
+cdatacli query sql --connection <name> --sql "EXEC ProcedureName Param1='value1', Param2='value2'"
 ```
+
 ---
 
 ### Step 7: Generate Application Code
@@ -216,7 +235,7 @@ If the user's goal includes generating application code, use the validated SQL, 
 **JDBC (Java):**
 - Windows: `C:\Program Files\CData\CData JDBC Driver for <DataSource> <Year>\lib\cdata.jdbc.<datasource>.jar`
 - macOS: `/Applications/CData/CData JDBC Driver for <DataSource> <Year>/lib/cdata.jdbc.<datasource>.jar`
-- CLI: `./drivers/cdata.jdbc.<datasource>.jar`
+- CLI-bundled: `./` or `./lib/cdata.jdbc.<datasource>.jar` next to the CLI executable
 - Driver class: `cdata.jdbc.<source>.<Source>Driver`
 - JDBC URL: `jdbc:<source>:<connection-string>`
 - License file: same directory, `cdata.jdbc.<datasource>.lic`
