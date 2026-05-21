@@ -43,6 +43,9 @@ All commands return JSON. Pretty-printed by default; append `--compact` for sing
 | Goal | Command |
 |---|---|
 | List installed drivers | `drivers list` |
+| Search remote driver catalog | `drivers search [--driver <name-or-artifact-id>]` |
+| Download driver jar | `drivers download --artifact-id <id> [--output <dir>]` |
+| Download driver jar (by URL) | `drivers download --url <jar-url> [--output <dir>]` |
 | Activate (trial) | `drivers activate --name <Driver> --email E --trial` |
 | Activate (key) | `drivers activate --name <Driver> --email E --key KEY` |
 | Inspect connection properties | `drivers connectionprops --name <Driver>` |
@@ -110,7 +113,15 @@ If a source-specific SKILL is already installed at `~/skills/cdata-<source>/`, i
 cdatacli drivers list
 ```
 
-If the driver appears with `"activated": true`, skip to Step 3. If the driver is missing, place its CData JDBC JAR in `./` or `./lib/` next to the CLI executable, then re-run `drivers list` to confirm discovery.
+If the driver appears with `"activated": true`, skip to Step 3. If the driver is missing, download it from the CData driver catalog:
+
+```bash
+cdatacli drivers search --driver <source>          # find the artifactId
+cdatacli drivers download --artifact-id <id>       # downloads to ./lib by default
+cdatacli drivers download --url <jar-url>          # alternative: direct URL
+```
+
+`drivers download` resolves the URL from CData's published `artifacts.json` catalog and writes the jar to `--output <dir>` (default `./lib/`) — the same location the CLI auto-discovers. Re-run `drivers list` to confirm discovery. As a manual fallback, place a CData JDBC JAR in `./` or `./lib/` next to the CLI executable.
 
 #### Activate
 
