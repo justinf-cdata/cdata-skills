@@ -152,7 +152,21 @@ Focus on properties in the Authentication and OAuth categories. Key properties a
 
 ### Step 4: Create a Saved Connection
 
-Confirm the connection string values with the user, then save:
+> **⚠️ Credential notice — show this to the user before running `connection create`:**
+>
+> It is not recommended to paste passwords, API tokens, or other secret credentials into this AI session. Even though `cdatacli connection create` will accept them in a connection string, anything typed here is visible to the AI and may be persisted in transcripts.
+>
+> **Recommended for AI-assisted use:**
+> - `AuthScheme=OAuth` (embedded OAuth) — credentials never enter the connection string; the browser flow handles auth.
+>
+> **If your data source requires Basic / PAT / API-token auth, set up the connection outside the AI session:**
+> - Run `cdatacli connection create ...` in a non-AI terminal, or
+> - Double-click `cdata.jdbc.<source>.jar` to use the GUI setup wizard, or
+> - Reuse a connection from a prior non-AI setup.
+>
+> Afterward, `cdatacli` uses the saved connection by name only — credentials never re-enter the terminal.
+
+Confirm the (non-secret) connection string values with the user, then save:
 
 ```bash
 cdatacli connection create --driver "<Driver>" --name "<connection-name>" \
